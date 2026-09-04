@@ -479,13 +479,40 @@ def page_inbox():
             if guard(out):
                 st.session_state.investigated[pick] = out
                 cached = out
-        if cached:
+        if cached and cached.get("unavailable"):
+            st.info(cached.get("error", "the investigator could not run"))
+        elif cached:
+            adv, gate = cached.get("advice", {}), cached.get("gate", {})
             html(f"<div class=muted style='margin-top:.7rem'>AI investigation &middot; "
                  f"{cached.get('tool_calls', 0)} tool calls &middot; "
                  f"{'abstained' if cached.get('abstained') else 'answered'} &middot; "
-                 f"not authoritative, for your judgment only</div>")
+                 f"advice only &mdash; it cannot approve, reject or post</div>")
             with st.container(border=True, key="card_investigation"):
-                st.markdown(cached.get("narrative", ""))
+                if adv.get("situation"):
+                    html(f"<div class=muted>what is happening</div>"
+                         f"<div style='margin-bottom:.6rem'>"
+                         f"{escape(adv['situation'])}</div>")
+                if adv.get("recommended_action"):
+                    html(f"<div class=muted>what you should do</div>"
+                         f"<div style='margin-bottom:.6rem'>"
+                         f"{escape(adv['recommended_action'])}</div>")
+                if adv:
+                    html(f"{chip(adv.get('advised_class', '-'), BLUE)}"
+                         + (f" {chip('abstained', AMBER)}" if cached.get("abstained") else "")
+                         + f" <span class=mono>"
+                         + escape(", ".join(adv.get("evidence") or []) or "no ids cited")
+                         + "</span>")
+                if gate:
+                    band = gate.get("band", "-")
+                    html(f"<div class=muted style='margin-top:.9rem'>if that advice were "
+                         f"submitted as a proposal, the policy engine would say</div>"
+                         f"{chip(band, BAND_COLOR.get(band, MUTED))} "
+                         f"{chip('allowed' if gate.get('allowed') else 'not allowed', GREEN if gate.get('allowed') else RED)}"
+                         f"<br><div class=muted style='margin-top:.4rem'>"
+                         + "<br>".join(escape(r) for r in gate.get("reasons", []))
+                         + "</div>")
+                with st.expander("the model's full working"):
+                    st.markdown(cached.get("narrative", ""))
 
     with right:
         with st.container(border=True, key="card_detail"):

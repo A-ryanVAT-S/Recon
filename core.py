@@ -210,7 +210,6 @@ class Proposal(_Rec):
     proposed_class: str
     proposed_action: str
     amount_inr: Decimal
-    confidence: Decimal = Decimal("0")     # never widens a band, only narrows
     arithmetic_verified: bool = False      # code re-derived it, not the model's opinion
     delta_inr: Decimal = Decimal("0")
     evidence_chain: list[str] = Field(default_factory=list)

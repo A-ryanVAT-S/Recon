@@ -25,7 +25,7 @@ SKILLS: dict[str, list[AgentSkill]] = {
         _skill("evaluate_proposal", "Evaluate a proposal",
                "Apply the written authority matrix to a proposal and return a band, reasons "
                "and, if a band grants it, a single-use authorization token. Contains no model "
-               "call: confidence can never widen a band.",
+               "call, and no field a proposer can set widens a band.",
                ["policy", "authority", "deterministic"],
                ["Evaluate proposal prop_1 for setl_00011"]),
         _skill("scan_text", "Scan text for injected instructions",

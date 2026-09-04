@@ -169,8 +169,6 @@ def _human_triggers(p: Proposal, hr: dict, earned_inr=None) -> list[str]:
         out.append(f"class {p.proposed_class} always needs a human")
     if hr.get("trigger_if_unverified") and not p.arithmetic_verified:
         out.append("arithmetic was not verified in code")
-    if p.confidence < Decimal(str(hr["trigger_if_confidence_below"])):
-        out.append(f"confidence {p.confidence} below {hr['trigger_if_confidence_below']}")
     return out
 
 
@@ -188,8 +186,6 @@ def _grants(p: Proposal, band_cfg: dict, earned_inr=None) -> tuple[bool, list[st
         missing.append("evidence chain incomplete")
     if req.get("counterparty_in_master") and not p.counterparty_in_master:
         missing.append("counterparty not in master")
-    if p.confidence < Decimal(str(req.get("min_confidence", 0))):
-        missing.append(f"confidence below {req.get('min_confidence')}")
     if (classes := band_cfg.get("classes")) and p.proposed_class not in classes:
         missing.append(f"class {p.proposed_class} not in this band")
     return (not missing), missing

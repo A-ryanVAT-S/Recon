@@ -152,8 +152,8 @@ async def post_approved(approval_id: str) -> dict:
     return out
 
 
-# a reviewer asking the investigator to look at this exact item before deciding.
-# read-only: the investigator holds no write tool and this call decides nothing itself
+# a reviewer asking the investigator to look at this exact item before deciding. read-only:
+# the investigator holds no write tool, and the advice it returns is gated but never acted on
 @api.post("/approvals/{approval_id}/investigate")
 async def investigate_approval(approval_id: str) -> dict:
     from agents.client import call_agent
@@ -161,7 +161,10 @@ async def investigate_approval(approval_id: str) -> dict:
     a = hl.get(approval_id)
     if a is None:
         raise HTTPException(404, f"no approval {approval_id}")
-    return await call_agent("investigator", {"record_id": a.record_id})
+    return await call_agent("investigator", {"record_id": a.record_id,
+                                             "record_type": a.record_type,
+                                             "amount_inr": str(a.amount_inr),
+                                             "run_id": a.run_id})
 
 
 @api.post("/whatif")

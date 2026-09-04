@@ -60,7 +60,7 @@ def build(record_id: str, ds=None, res=None, matrix=None, finding: dict | None =
         proposal_id="prop_" + uuid.uuid4().hex[:10], record_id=record_id,
         record_type=exc.record_type, proposed_class=exc.detected_class,
         proposed_action="resolve", amount_inr=money(abs(delta)),
-        confidence=Decimal("0.90"), arithmetic_verified=exc.detected_class != "unexplained",
+        arithmetic_verified=exc.detected_class != "unexplained",
         delta_inr=delta, evidence_chain=[record_id], period="",
         source_texts=[text], generated_by="evidence-pack")
     d = evaluate(prop, RunContext(run_id="pack"), matrix)

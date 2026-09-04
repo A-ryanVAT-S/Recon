@@ -19,7 +19,7 @@ Say you run a shop online. A customer pays you ₹2,000 with their card.
 
 You might assume ₹2,000 shows up in your bank account. It does not. Here is what really happens:
 
-1. A **payment gateway** (Razorpay, Stripe, PayU) collects the money on your behalf.
+1. A **payment gateway** collects the money on your behalf.
 2. It holds it, along with everyone else's payments from that day.
 3. Once a day it takes its cut, and wires you **one lump sum** for the whole batch.
 
@@ -239,7 +239,7 @@ account-tier constraint, not something the architecture can route around.
 
 ### Step 1 — Generate the data
 
-There is no real bank and no real Razorpay here. The data is synthetic and seeded, so anyone can
+There is no real bank and no real PSP here. The data is synthetic and seeded, so anyone can
 regenerate it and get identical files. The order of operations is the clever part:
 
 1. Build a **completely consistent** month. Every settlement's arithmetic ties exactly.
@@ -333,7 +333,7 @@ HARD_STOP  →  circuit breakers  →  HUMAN_REQUIRED  →  AUTO_WITH_NOTICE  �
                                              anything unmatched → HUMAN_REQUIRED
 ```
 
-**`HARD_STOP` — never, at any confidence.** Over ₹5,00,000 · a closed accounting period · an
+**`HARD_STOP` — never, whoever proposes it.** Over ₹5,00,000 · a closed accounting period · an
 unknown counterparty · no evidence chain · **instruction-like text on the record**.
 
 **Circuit breakers.** Max 100 automatic actions per run, max ₹5,00,000 total, and autonomy shuts
@@ -341,15 +341,23 @@ off entirely if the verifier starts disagreeing with itself more than 2% of the 
 systematic bug must not compound across 500 records.
 
 **`HUMAN_REQUIRED`.** Over ₹2,00,000 · or a class that always needs a person (duplicates, fee
-overcharges, missing credits, unmatched credits) · or arithmetic not verified · or confidence
-below 0.85.
+overcharges, missing credits, unmatched credits) · or arithmetic not verified.
 
 **`AUTO_WITH_NOTICE`** — up to ₹2,00,000, proven, someone is told, reversible for 24 hours.
 
 **`AUTO_RESOLVE`** — up to ₹25,000, proven, and only for eight classes code can actually prove.
 
-> **Confidence can never widen a band.** A 99%-confident ₹9,00,000 match still escalates. High
-> confidence is *necessary* in some bands and *sufficient* in none.
+> **There is no confidence score, and there is no band that a proposer's own opinion can
+> reach.** The matrix reads amount, class, period, counterparty, evidence chain, source text,
+> and whether *code* re-derived the arithmetic. Every one of those is a fact the engine
+> establishes or a field it refuses to take on trust. A proposer — deterministic matcher or
+> language model — supplies a class and an action, and nothing else that carries weight.
+
+Earlier versions carried a `confidence` field on every proposal, with a `0.85` floor on the two
+automatic bands. It was removed: the only producer ever set it to a hardcoded `0.90`, so the
+floor was unreachable by construction and the field did nothing but suggest that a score could
+buy authority. Removing it changed no decision on any of the 5,320 records — see
+[results.md](results.md).
 
 The entire rulebook is one Python dictionary in `agents/policy/matrix.py`. No YAML, no config
 format. **Editing that file is the only way to change what the system may do alone.**
@@ -464,7 +472,7 @@ Each claim below is enforced somewhere specific, not promised.
 |---|---|
 | The arithmetic is right | `Decimal` + `ROUND_HALF_UP`, never `float`; per-payment rounding |
 | The gateway's numbers are not trusted | fees re-derived from the contract; stored fees marked *observed, not recomputed* |
-| A model cannot widen its own authority | policy engine contains no model call; confidence only ever narrows |
+| A model cannot widen its own authority | policy engine contains no model call; no proposal field a model fills is read as proof |
 | A model cannot write to the ledger | writes need a token only the gate mints; the ledger re-verifies it itself |
 | An approved action cannot be mutated | the token is bound to `sha256(record, action, amount)` |
 | Text in the data cannot give orders | deterministic scanner, hard stop, before any model reads it |

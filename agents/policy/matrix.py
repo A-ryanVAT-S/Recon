@@ -18,7 +18,6 @@ MATRIX = {
                 "arithmetic_verified": True,
                 "evidence_chain_complete": True,
                 "counterparty_in_master": True,
-                "min_confidence": "0.85",
             },
             "classes": [
                 "exact_match",
@@ -40,7 +39,6 @@ MATRIX = {
                 "arithmetic_verified": True,
                 "evidence_chain_complete": True,
                 "counterparty_in_master": True,
-                "min_confidence": "0.85",
             },
             "classes": [],          # empty means any class a denying band above did not catch
             "effect": "write to ledger, include in the daily digest, reversible for 24h",
@@ -59,7 +57,6 @@ MATRIX = {
                 "unexplained",
             ],
             "trigger_if_unverified": True,
-            "trigger_if_confidence_below": "0.85",
             "effect": "propose only, route to a human, book nothing",
         },
 
@@ -71,7 +68,7 @@ MATRIX = {
             "on_counterparty_absent": True,
             "on_empty_evidence_chain": True,
             "on_instruction_like_source_text": True,
-            "effect": "never automatable, at any confidence",
+            "effect": "never automatable, by any proposer",
         },
     },
 

@@ -85,7 +85,7 @@ BANK_FIELDS = ("line_id", "value_date", "narration", "utr", "credit_inr",
 def build_psp() -> MCPServer:
     mcp = MCPServer(
         name="psp-mcp",
-        instructions="Razorpay-side records. fee_inr and gst_inr are what the PSP SAYS it "
+        instructions="PSP-side records. fee_inr and gst_inr are what the PSP SAYS it "
                      "charged; recompute from get_fee_schedule to check them.",
     )
 

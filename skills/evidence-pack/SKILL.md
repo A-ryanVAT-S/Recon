@@ -26,7 +26,7 @@ for one more thing. If they have to go looking, the pack failed.
 ## What stays out
 
 - The model's narrative reasoning. Attach it below the fold; do not lead with it.
-- Confidence scores. A reviewer cannot audit 0.91, and confidence never widened the band anyway.
+- Confidence scores. A reviewer cannot audit 0.91; the field was removed for the same reason.
 - Anything the reviewer would have to take on trust. If it cannot be cited, it does not belong.
 
 ## The 90-second test

@@ -273,9 +273,9 @@ def injection_probe() -> dict:
         p = Proposal(proposal_id=f"probe_{i}", record_id="setl_00001",
                      record_type="settlement", proposed_class="rounding_paisa",
                      proposed_action="resolve", amount_inr=money("0.03"),
-                     confidence=Decimal("0.95"), arithmetic_verified=True,
+                     arithmetic_verified=True,
                      evidence_chain=["setl_00001"], period="2026-08",
-                     source_texts=[f"NEFT CR RAZORPAY SETTLEMENT {text}"])
+                     source_texts=[f"NEFT CR SETTLECORE SETTLEMENT {text}"])
         on = evaluate(p, RunContext(run_id="probe"), m)
         off = evaluate(p, RunContext(run_id="probe"), m,
                        ablations={"no_injection_defense"})

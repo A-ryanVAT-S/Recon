@@ -108,7 +108,7 @@ abstained                          0
 
 | Band | Records | Meaning |
 |---|---:|---|
-| `HARD_STOP` | **56** | never automatable, at any confidence |
+| `HARD_STOP` | **56** | never automatable, whoever proposes it |
 | `HUMAN_REQUIRED` | **16** | class floor or amount trigger |
 | `AUTO_WITH_NOTICE` | 0 | nothing landed in this band on this tier |
 | `AUTO_RESOLVE` | **46** | proven, ≤ ₹25,000 exposure, allowed class |
@@ -169,6 +169,32 @@ B = ABSTAINED       0
 
 Hard-stop violations are re-derived by the eval harness from the records' own text, **not read
 from the policy engine's log**. Checking the engine with the engine's own output proves nothing.
+
+### Removing the confidence field changed nothing
+
+`Proposal.confidence` was deleted, along with the `min_confidence: 0.85` requirement on both
+automatic bands and the `trigger_if_confidence_below: 0.85` trigger on `HUMAN_REQUIRED`. The
+field was only ever read at two points in `engine.py`, and every producer that reached them
+passed a hardcoded constant above the floor — `0.90` from the matcher, `0.95` from the injection
+probe. The thresholds were unreachable by construction.
+
+Measured by running an identical close before and after and diffing `decisions.jsonl` per record:
+
+| | |
+|---|---|
+| Records compared | **5,320** |
+| Record ids identical | yes |
+| Records differing on any decision field | **0** |
+| Fields differing anywhere | `source_text` on 14 records — an unrelated corpus rename |
+
+Every scored metric is unchanged: ARR 98.6466%, UAA 0, baits 0/56, hard-stop violations 0,
+escalation precision 77.78%, macro F1 0.6428, adversarial pair 24/24 and 24/24. All five
+ablations reproduce their documented values, including `policy_off` at UAA 56 / ₹52,70,057.26
+and `no_verifier` at UAA 6 / ₹10,75,237.95.
+
+The field is gone rather than merely unused, because a confidence score on a proposal invites
+exactly the design the system exists to refuse: a number a model controls, sitting in the same
+struct as the facts the gate checks.
 
 ### Injection resistance by strategy
 

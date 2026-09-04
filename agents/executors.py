@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from decimal import Decimal
 from pathlib import Path
@@ -13,8 +14,8 @@ from a2a.server.events import EventQueue
 from a2a.types import Message, Part, Role
 
 import trace
-from core import (Band, PolicyDecision, Proposal, RunContext, load_dataset, money,
-                    rupees)
+from core import (AnomalyClass, Band, PolicyDecision, Proposal, RunContext,
+                    load_dataset, money, rupees)
 from dataset import verify as funnel
 from MCP.servers import data_root
 from agents.policy.engine import (evaluate, evaluate_human_approved, load_matrix,
@@ -101,6 +102,17 @@ class PolicyAgent(_Base):
                     "context": ctx.model_dump(mode="json")}
 
         d = evaluate(p, ctx, MATRIX, ablations)
+
+        # an advisory asks the gate what it would decide. same matrix, same reasons, but it
+        # mints no token and spends none of the run's budget, so it can author no write
+        if req.get("advisory"):
+            d = d.model_copy(update={"authorization_token": None})
+            trace.emit(run_id, "policy", self.name, p.record_id,
+                       proposal_id=p.proposal_id, band=d.band, allowed=d.allowed,
+                       reasons=d.reasons, owner=d.owner, advisory=True)
+            return {"decision": d.model_dump(mode="json"), "advisory": True,
+                    "context": ctx.model_dump(mode="json")}
+
         if d.allowed:
             record_action(p, ctx)
         trace.emit(run_id, "policy", self.name, p.record_id,
@@ -178,11 +190,100 @@ class MatcherAgent(_Base):
                 "source_texts": [s.remark], "payment_count": len(s.payment_ids)}
 
 
-# builds an evidence chain over the mcp servers, or abstains
+ADVICE_CLASSES = tuple(c.value for c in AnomalyClass) + ("unexplained",)
+
+ADVICE_BLOCK = """
+
+You are writing for one reviewer who has this record open and has to decide now. End your reply
+with one fenced json block and nothing after it:
+
+```json
+{"situation": "one sentence: what this record actually is and why it stopped here",
+ "recommended_action": "one sentence: what the reviewer should do next, concretely",
+ "advised_class": "one of: """ + " ".join(ADVICE_CLASSES) + """",
+ "evidence": ["the record ids you actually read"],
+ "abstained": false}
+```
+
+Finish the investigation before you write that block, search_customers included. Two separate
+questions decide the class, and answering only the first is the common mistake:
+
+  does a settlement explain this credit?   no  ->  it is not a settlement match
+  does the narration name resolve to a customer in the master?
+       yes -> counterparty_name_drift, and cite that cust_ id in evidence
+       no  -> unmatched_bank_credit, or unexplained if you cannot tell
+
+A credit with no settlement behind it is still name drift when the remitter is a known customer.
+Cite the cust_ id you actually resolved and no others. Set abstained true and advised_class
+"unexplained" when the evidence does not support a fix; advising a fix you cannot evidence is
+worse than abstaining."""
+
+
+# anyio buries the real cause inside an ExceptionGroup, which reads as nothing in the inbox
+def _rate_limit_detail(exc: BaseException) -> str:
+    seen, queue = [], [exc]
+    while queue:
+        e = queue.pop()
+        seen.append(e)
+        queue.extend(getattr(e, "exceptions", None) or ([e.__cause__] if e.__cause__ else []))
+    for e in seen:
+        if type(e).__name__ in ("RateLimitError", "APIStatusError"):
+            msg = str(e)
+            if "tokens per day" in msg or "TPD" in msg:
+                return "the model's daily free-tier token budget is spent; it resets on the hour"
+            return f"the model refused the call: {msg[:200]}"
+    return f"the investigator could not run: {type(exc).__name__}"
+
+
+# the model's advice, parsed from its own reply; anything unparseable is an abstention
+def _parse_advice(text: str) -> dict:
+    blocks = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
+    raw: dict = {}
+    for b in reversed(blocks):
+        try:
+            got = json.loads(b)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(got, dict):
+            raw = got
+            break
+    cls = str(raw.get("advised_class") or "").strip()
+    ev = [str(x) for x in (raw.get("evidence") or []) if isinstance(x, (str, int))]
+    known = cls in ADVICE_CLASSES
+    abstained = bool(raw.get("abstained")) or not known
+    return {
+        "situation": str(raw.get("situation") or "")[:400],
+        "recommended_action": str(raw.get("recommended_action") or "")[:400],
+        # an invented class is not a class; deny-first reads it as unexplained
+        "advised_class": cls if known else "unexplained",
+        # the action follows from whether it could evidence anything, not from its own say-so
+        "advised_action": "investigate_further" if abstained else "resolve",
+        "evidence": ev[:12],
+        "abstained": abstained,
+        "parsed": bool(raw),
+    }
+
+
+# builds an evidence chain over the mcp servers, proposes a fix, or abstains
 class InvestigatorAgent(_Base):
     name = "investigator"
 
+    # the model names a counterparty; code confirms it against the master itself
+    @staticmethod
+    def _cited_in_master(evidence: list[str]) -> bool:
+        ids = {e for e in evidence if e.startswith("cust_")}
+        return bool(ids) and ids <= {c.customer_id for c in MatcherAgent().ds().customers}
+
+    _PREFIX = {"setl": "settlement", "bank": "bank_line", "pay": "payment", "rfnd": "refund"}
+
+    # the scanner must read the record's real text, not text a caller handed us
+    @classmethod
+    def _record_text(cls, record_id: str, record_type: str) -> tuple[str, str]:
+        rt = record_type or cls._PREFIX.get(record_id.split("_")[0], "")
+        return rt, MatcherAgent.source_text(MatcherAgent().ds(), rt, record_id)
+
     async def handle(self, req: dict, run_id: str) -> dict:
+        from .client import call_agent
         from MCP.agent import Agent
 
         record_id = req.get("record_id", "")
@@ -194,22 +295,62 @@ class InvestigatorAgent(_Base):
             f"customer whose name is just spelled differently in the bank narration than "
             f"in the master record; check that BEFORE ruling it external. If the evidence "
             f"is not sufficient, say INSUFFICIENT EVIDENCE and name what is missing. "
-            f"Cite record ids. Be concise.")
+            f"Cite record ids. Be concise.") + ADVICE_BLOCK
 
         # a smaller model: fast enough to call on demand from one inbox item, and its
         # token footprint per turn is small enough not to blow the account's rate limit
         # the way the heavier model did across a multi-record batch
         model = req.get("model", "openai/gpt-oss-20b")
-        with trace.span(run_id, "a2a", self.name, record_id, delegate="mcp-agent",
-                        model=model):
-            async with Agent(model=model, verbose=False) as a:
-                answer = await a.ask(question, max_turns=req.get("max_turns", 5))
-                calls = a.calls
+        try:
+            with trace.span(run_id, "a2a", self.name, record_id, delegate="mcp-agent",
+                            model=model):
+                async with Agent(model=model, verbose=False) as a:
+                    answer = await a.ask(question, max_turns=req.get("max_turns", 5))
+                    calls = a.calls
+        # the free tier's daily token budget is the one failure a reviewer will actually hit
+        except BaseException as exc:  # noqa: BLE001 - anyio wraps the cause in a group
+            detail = _rate_limit_detail(exc)
+            trace.emit(run_id, "note", self.name, record_id, model=model,
+                       investigator_unavailable=detail)
+            return {"record_id": record_id, "error": detail, "advisory": True,
+                    "unavailable": True}
+
+        advice = _parse_advice(answer)
+        advice["abstained"] = (advice["abstained"]
+                               or "INSUFFICIENT EVIDENCE" in answer.upper())
+
+        # the model supplies a class, an action and the ids it read. every field that could
+        # widen authority is set here by code - see project.md, the advisory path
+        record_type, source_text = self._record_text(record_id, req.get("record_type", ""))
+        prop = Proposal(
+            proposal_id="adv_" + uuid.uuid4().hex[:10],
+            record_id=record_id, record_type=record_type,
+            proposed_class=advice["advised_class"],
+            proposed_action=advice["advised_action"],
+            amount_inr=money(req.get("amount_inr", "0")),
+            arithmetic_verified=False,      # no model may assert that code re-derived anything
+            evidence_chain=advice["evidence"],
+            counterparty_in_master=self._cited_in_master(advice["evidence"]),
+            period=req.get("period", ""),
+            source_texts=[source_text],
+            generated_by=f"investigator:{model}")
+
+        # the real gate, the same code path a close uses, asked what it WOULD do. advisory
+        # evaluation mints no token, so this answer can never become a ledger write
+        got = await call_agent("policy", {"skill": "evaluate_proposal", "run_id": run_id,
+                                          "advisory": True,
+                                          "proposal": prop.model_dump(mode="json"),
+                                          "context": {"run_id": "advisory"}})
+        gate = got.get("decision", {})
 
         trace.emit(run_id, "proposal", self.name, record_id,
-                   tool_calls=calls, abstained="INSUFFICIENT EVIDENCE" in answer.upper())
+                   tool_calls=calls, abstained=advice["abstained"],
+                   advised_class=advice["advised_class"],
+                   advised_action=advice["advised_action"],
+                   advisory_band=gate.get("band"), advisory_allowed=gate.get("allowed"))
         return {"record_id": record_id, "narrative": answer, "tool_calls": calls,
-                "abstained": "INSUFFICIENT EVIDENCE" in answer.upper()}
+                "abstained": advice["abstained"], "advice": advice,
+                "advisory_proposal_id": prop.proposal_id, "gate": gate, "advisory": True}
 
 
 QA_SYSTEM = """You answer questions about reconciliation runs that have already happened.
@@ -334,7 +475,7 @@ class ControllerAgent(_Base):
                         "action": "MATCHED", "detected_class": "exact_match",
                         "band": "", "owner": None, "allowed": True,
                         "exposure_inr": "0.00", "record_value_inr": "0.00",
-                        "confidence": "1.0", "arithmetic_verified": True,
+                        "arithmetic_verified": True,
                         "source_text": "", "source_flags": []})
         path = trace.run_dir(run_id) / "decisions.jsonl"
         with path.open("w", encoding="utf-8", newline="\n") as fh:
@@ -369,7 +510,7 @@ class ControllerAgent(_Base):
                 record_id=e["record_id"], record_type=e["record_type"],
                 proposed_class=e["detected_class"], proposed_action="resolve",
                 # exposure is what the correction moves, not what the record is worth
-                amount_inr=money(abs(delta)), confidence=Decimal("0.90"),
+                amount_inr=money(abs(delta)),
                 # verified means code re-derived the numbers and named the residual
                 arithmetic_verified=True if "no_verifier" in ablations else named,
                 delta_inr=delta, evidence_chain=[e["record_id"]],
@@ -401,7 +542,6 @@ class ControllerAgent(_Base):
                          "owner": d.get("owner"), "allowed": bool(d["allowed"]),
                          "exposure_inr": str(money(abs(delta))),
                          "record_value_inr": str(money(e["amount_inr"])),
-                         "confidence": "0.90",
                          "arithmetic_verified": bool(prop.arithmetic_verified),
                          "detail": e["detail"], "reasons": d.get("reasons", []),
                          "source_text": e.get("source_text", ""), "source_flags": flags})

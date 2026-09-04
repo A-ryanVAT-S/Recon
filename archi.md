@@ -107,6 +107,12 @@ Read/write is split at the tool-list level: the Q&A agent is built `read_only=Tr
      └─────────────────────────────────────────────────────────────┘
      │
      │ optional: A2A ── investigate ──▶ INVESTIGATOR (LLM)
+     │                                     │ advisory Proposal
+     │                                     ▼
+     │                                  POLICY ENGINE (advisory: no token)
+     │                                     │ band · allowed · reasons
+     │                                     ▼
+     │                                  shown to the reviewer, posts nothing
      ▼
   decisions.jsonl · close_report.json · trace.jsonl ──── run_end
 ```
@@ -115,6 +121,19 @@ Nothing there is a model call unless the optional investigator line runs. That l
 ways: batched here during a close (`--investigate N`, largest escalations first), or on demand —
 `POST /approvals/{id}/investigate` calls the same skill for one record, wired to an **Investigate**
 button in the Approval Inbox so a reviewer can ask before deciding rather than only in a batch.
+
+**The advisory loop is the only place a model's proposal meets the gate.** The investigator ends
+its reply with a structured advisory; code parses it, builds a `Proposal`, and evaluates it
+through `evaluate()` — the same function, the same matrix, the same deny-first order a close
+uses. Three things make it safe to point a model at that gate:
+
+- `arithmetic_verified` is set to `False` by code, always. A model cannot claim code re-derived
+  something, so no model proposal can satisfy the two automatic bands.
+- `counterparty_in_master` is re-checked against the customer master, and `source_texts` are
+  re-read from the dataset — never taken from the caller, so the injection scanner sees the
+  record's real narration.
+- `advisory: True` suppresses token minting and skips `record_action`, so the evaluation spends
+  none of the run's circuit-breaker budget and produces nothing the ledger would accept.
 
 ---
 
@@ -130,7 +149,6 @@ button in the Approval Inbox so a reviewer can ask before deciding rather than o
                      · verifier disagreement > 2% → autonomy halts
         │ pass
   HUMAN_REQUIRED     > ₹2,00,000 · never-auto class · unverified
-                     · confidence < 0.85
         │ pass
   AUTO_RESOLVE       ≤ ₹25,000 · verified · evidence complete
                      · counterparty in master · class in the allowed 8

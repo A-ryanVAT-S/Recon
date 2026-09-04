@@ -56,7 +56,6 @@ def reband(rows: list[dict], ceiling: Decimal, matrix: dict | None = None) -> di
                      record_type=r.get("record_type", ""),
                      proposed_class=r.get("detected_class", ""),
                      proposed_action="resolve", amount_inr=money(r.get("exposure_inr", "0")),
-                     confidence=Decimal(str(r.get("confidence", "0"))),
                      arithmetic_verified=bool(r.get("arithmetic_verified")),
                      evidence_chain=[r["record_id"]],
                      source_texts=[r.get("source_text", "")])
