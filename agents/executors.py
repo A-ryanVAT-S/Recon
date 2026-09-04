@@ -229,8 +229,13 @@ def _rate_limit_detail(exc: BaseException) -> str:
     for e in seen:
         if type(e).__name__ in ("RateLimitError", "APIStatusError"):
             msg = str(e)
+            # groq's window is rolling, so it tells you when capacity comes back, not a clock time
+            retry = re.search(r"try again in ([0-9hms.]+)", msg)
+            when = f"; capacity returns in about {retry.group(1)}" if retry else ""
             if "tokens per day" in msg or "TPD" in msg:
-                return "the model's daily free-tier token budget is spent; it resets on the hour"
+                return f"the model's free-tier token budget for today is spent{when}"
+            if "tokens per minute" in msg or "TPM" in msg:
+                return f"the model's per-minute token budget is spent{when}"
             return f"the model refused the call: {msg[:200]}"
     return f"the investigator could not run: {type(exc).__name__}"
 
@@ -299,8 +304,10 @@ class InvestigatorAgent(_Base):
 
         # a smaller model: fast enough to call on demand from one inbox item, and its
         # token footprint per turn is small enough not to blow the account's rate limit
-        # the way the heavier model did across a multi-record batch
-        model = req.get("model", "openai/gpt-oss-20b")
+        # the way the heavier model did across a multi-record batch. the daily budget is
+        # per model, so RECON_INVESTIGATOR_MODEL switches to a fresh one when this is spent
+        model = (req.get("model")
+                 or os.getenv("RECON_INVESTIGATOR_MODEL", "openai/gpt-oss-20b"))
         try:
             with trace.span(run_id, "a2a", self.name, record_id, delegate="mcp-agent",
                             model=model):
