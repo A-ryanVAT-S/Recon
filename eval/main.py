@@ -31,7 +31,7 @@ def e_md(x) -> str:
     return str(x).replace("|", r"\|")
 
 
-# the scorecard as the deck and the README quote it
+# the scorecard, rendered for offline reading
 def to_markdown(s: dict) -> str:
     h, sf, ac, cf, tp = s["headline"], s["safety"], s["accuracy"], s["confusion"], s["throughput"]
     L = [f"# Recon scorecard — `{s['run_id']}`", "",
@@ -90,9 +90,9 @@ def to_markdown(s: dict) -> str:
           f"| LLM calls per 100 records | {tp.get('llm_calls_per_100_records', 0)} |",
           f"| Reviewer minutes imposed | {tp.get('reviewer_minutes_imposed', 0):,} |",
           "",
-          "Lead with calls per *investigated exception*. Calls per 100 records answers "
-          "\"what does this cost at our volume\"; quoted alone at an agent hackathon it "
-          "reads as thin. Record share is not work share.",
+          "Calls per *investigated exception* measures the cost of the work the model "
+          "actually does; calls per 100 records measures cost at volume. Record share is "
+          "not work share.",
           "", "## What actually held each escalation back", "",
           "| Binding constraint | Records |", "|---|---|"]
     L += [f"| {e_md(k)} | {v} |" for k, v in s["binding_constraints"].items()]
@@ -172,7 +172,7 @@ def _git_sha() -> str:
         return "n/a"
 
 
-# 6. everything a judge should be able to open offline
+# 6. every artifact a run produces, openable offline
 def write_artifacts(s: dict, ablations: dict | None = None) -> list[str]:
     d = trace.run_dir(s["run_id"])
     out = []

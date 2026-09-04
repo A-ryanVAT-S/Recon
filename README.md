@@ -12,8 +12,6 @@ and routes the rest to a named human with an evidence chain.
 > *proposal*. It becomes an *action* only when code re-derives the arithmetic to the paisa and the
 > written authority matrix permits it. Confidence can never widen authority.
 
-Built for the Razorpay hackathon, Track 04 — AI Finance Controller.
-
 ---
 
 ## The headline
@@ -197,9 +195,6 @@ The long version, with the test → **[project.md](project.md) Part 3**
 
 All eight known gaps, with numbers → [results.md §11](results.md)
 
-Every one is written down because a judge who finds a gap you hid discounts everything else you
-claimed.
-
 ---
 
 ## Docs
@@ -209,4 +204,3 @@ claimed.
 | [project.md](project.md) | the whole system from zero, for someone with no context |
 | [archi.md](archi.md) | how it is wired: layers, trust boundaries, the gate, the layout |
 | [results.md](results.md) | every measured number, and how to reproduce it |
-| [script.md](script.md) | *temporary* — the 5-minute demo script |

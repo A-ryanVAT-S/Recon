@@ -66,8 +66,8 @@ what was planted, class by class.
 | gate 2 (detection) | ✅ | ✅ |
 | exception rate | 2.22% | **1.10%** |
 
-DEMO is deliberately enriched so every class is visible in a demo-length run. SCALE is the
-realistic rate. **Quote SCALE for rates, DEMO for coverage of the class list.**
+DEMO is deliberately enriched so every anomaly class is present in a small corpus. SCALE carries
+the realistic exception rate. Rates should be quoted from SCALE; DEMO covers the full class list.
 
 ### Anomalies planted
 
@@ -212,8 +212,7 @@ The bait always sits on the record that is trying to hide.
 
 **Two precisions on purpose.** Class-strict asks "did it name the right class?"; outcome asks
 "was AUTO the right call?". The 0.25% gap is **13 records that T0 recovers silently** — right
-outcome, class never stated. Naming the gap is more honest than picking whichever number
-flatters.
+outcome, class never stated. Both are reported rather than whichever is higher.
 
 **Escalation recall is 100%.** Not one record that needed a human failed to reach one.
 
@@ -365,8 +364,8 @@ damage.
 
 **`no_precedents` — no headroom on this tier, reported honestly.** Earned authority can only help
 where ground truth says AUTO and the matrix currently escalates. On DEMO every such record
-already auto-resolves, so its lift is exactly zero. Reporting a throughput number this dataset
-cannot support would be the easier story and the wrong one.
+already auto-resolves, so its lift is exactly zero. No throughput claim is made for it, because
+this dataset cannot support one.
 
 **`no_injection_defense` — redundancy, measured separately.** No change, because in this dataset
 the bait only ever sits on records a human was going to see anyway; the class floor catches them
@@ -460,14 +459,13 @@ humans — never to widen what runs without them.**
 The investigator could **not** be run across the full 3-server tool belt on the current Groq free
 tier: 20 tool schemas plus results exceed the **8,000 tokens/minute** cap and return HTTP 413
 after ~4 tool calls. It completes fine on a narrowed belt. This is an account-tier limit, not a
-design limit, and it is why the demo close ships with `--investigate 0` by default.
+design limit, and it is why a close defaults to `--investigate 0`.
 
 ---
 
-## 11. The honest list
+## 11. Known gaps
 
-Everything below is a real gap, written down because a judge who finds one you hid discounts
-everything else you claimed.
+Every limitation found during evaluation, with its measured cost.
 
 1. **`counterparty_name_drift` reports as `unmatched_bank_credit`.** 16 records. This is the
    entire 77.78% escalation precision and the whole `counterparty_name_drift` F1 of 0.0.

@@ -35,7 +35,7 @@ The band between them is deliberately left unnamed. Same order 20 minutes apart,
 order 10 minutes apart, is neither pattern — abstain and escalate rather than guess. **The gap
 is not a hole; it is where the discriminator admits it does not know.**
 
-## Naming the legitimate case out loud
+## Naming the legitimate case explicitly
 
 A repeat purchase must be **positively identified**, not merely left unflagged. "Nothing
 matched it" and "its own order id and a three-hour gap prove it is a second sale" look the same
