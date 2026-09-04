@@ -1,0 +1,39 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- environments ----
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# ---- editors / OS ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---- generated data ----
+# 121 MB, and fully reproducible from the seed:
+#   python -m dataset.main generate --seed 42 --scale demo
+# `python main.py up` and `demo` regenerate it automatically when missing.
+dataset/data/out/
+
+# run artifacts, traces, scorecards and the approval queue are all generated
+runs/
+
+# ---- local only ----
+*.zip
+script.md
+CLAUDE.md
