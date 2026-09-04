@@ -147,7 +147,11 @@ class Agent:
         except Exception as e:
             return f"TOOL ERROR: {type(e).__name__}: {e}"
 
-    # groq's free tier caps tokens per minute, so back off and retry rather than dying
+    # groq's free tier caps tokens per minute, so back off and retry rather than dying.
+    # tool_choice="none" is NOT used to force a final turn: some models emit a tool call
+    # anyway and Groq then rejects the whole response with a 400, which is worse than the
+    # turn-limit case it was meant to prevent. A plain-text nudge in the messages does the
+    # same job without a mode the model can violate into a hard error.
     async def _complete(self, client, messages, tries: int = 4):
         import asyncio
         for attempt in range(tries):
@@ -164,6 +168,12 @@ class Agent:
                 await asyncio.sleep(wait)
         raise RuntimeError("unreachable")
 
+    # what got called, for a fallback answer that is at least useful when the model
+    # never produces a final written turn
+    def _calls_so_far(self, messages) -> str:
+        calls = [m["name"] for m in messages if m.get("role") == "tool"]
+        return ("checked " + ", ".join(calls)) if calls else "no tools were called"
+
     # one question -> tool-calling loop -> final answer
     async def ask(self, question: str, max_turns: int = 12) -> str:
         key = os.getenv("GROQ_API_KEY", "").strip()
@@ -174,6 +184,10 @@ class Agent:
                     {"role": "user", "content": question}]
 
         for turn in range(max_turns):
+            if turn == max_turns - 1:
+                messages.append({"role": "user", "content":
+                    "This is the last turn. Do not call another tool. Write your final "
+                    "answer now using only what you have already found above."})
             resp = await self._complete(client, messages)
             msg = resp.choices[0].message
             messages.append({
@@ -186,6 +200,8 @@ class Agent:
             })
             if not msg.tool_calls:
                 return msg.content or "(no answer)"
+            if turn == max_turns - 1:
+                break        # it ignored the nudge; fall through to the summary below
 
             for tc in msg.tool_calls:
                 try:
@@ -198,4 +214,4 @@ class Agent:
                 messages.append({"role": "tool", "tool_call_id": tc.id,
                                  "name": tc.function.name, "content": out})
 
-        return "(hit the turn limit without a final answer)"
+        return f"INSUFFICIENT EVIDENCE — ran out of turns before concluding ({self._calls_so_far(messages)})."

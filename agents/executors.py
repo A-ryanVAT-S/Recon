@@ -188,12 +188,22 @@ class InvestigatorAgent(_Base):
         record_id = req.get("record_id", "")
         question = req.get("question") or (
             f"Investigate record {record_id}. Establish what it is, what it should have "
-            f"matched, and what evidence supports that. If the evidence is not sufficient, "
-            f"say INSUFFICIENT EVIDENCE and name what is missing. Cite record ids.")
+            f"matched, and what evidence supports that. Before concluding a bank credit is "
+            f"unexplained, extract the counterparty name from its narration and call "
+            f"ledger's search_customers with it — an unmatched credit is often a known "
+            f"customer whose name is just spelled differently in the bank narration than "
+            f"in the master record; check that BEFORE ruling it external. If the evidence "
+            f"is not sufficient, say INSUFFICIENT EVIDENCE and name what is missing. "
+            f"Cite record ids. Be concise.")
 
-        with trace.span(run_id, "a2a", self.name, record_id, delegate="mcp-agent"):
-            async with Agent(verbose=False) as a:
-                answer = await a.ask(question, max_turns=req.get("max_turns", 8))
+        # a smaller model: fast enough to call on demand from one inbox item, and its
+        # token footprint per turn is small enough not to blow the account's rate limit
+        # the way the heavier model did across a multi-record batch
+        model = req.get("model", "openai/gpt-oss-20b")
+        with trace.span(run_id, "a2a", self.name, record_id, delegate="mcp-agent",
+                        model=model):
+            async with Agent(model=model, verbose=False) as a:
+                answer = await a.ask(question, max_turns=req.get("max_turns", 5))
                 calls = a.calls
 
         trace.emit(run_id, "proposal", self.name, record_id,

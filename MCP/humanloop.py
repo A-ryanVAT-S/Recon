@@ -132,12 +132,25 @@ def request(record_id: str, proposal_id: str, proposed_action: str, amount_inr,
                  record_type=record_type or "settlement",
                  proposed_class=detected_class, proposed_action=proposed_action,
                  amount_inr=amt)
+    act = action_hash(p)
+
+    # re-closing the same month must not queue the same correction twice; the action hash
+    # is stable across runs, so an open request for it is the one already in the inbox
+    if (open_req := next((x for x in pending()
+                          if x.record_id == record_id and x.action_hash == act), None)):
+        if run_id:
+            trace.emit(run_id, "escalation", "humanloop", record_id,
+                       approval_id=open_req.approval_id, owner=open_req.owner,
+                       urgency=open_req.urgency, delivery=open_req.delivery,
+                       sla_hours=open_req.sla_hours, reused=True)
+        return open_req
+
     a = Approval(
         run_id=run_id, record_id=record_id, record_type=record_type,
         proposal_id=proposal_id, proposed_action=proposed_action, amount_inr=amt,
         detected_class=detected_class, owner=owner or routed["owner"],
         urgency=routed["urgency"], sla_hours=SLA_HOURS[routed["urgency"]],
-        rationale=rationale, action_hash=action_hash(p), pack=pack or {},
+        rationale=rationale, action_hash=act, pack=pack or {},
         expires_at=(datetime.now(timezone.utc)
                     + timedelta(hours=ttl_hours)).isoformat(timespec="seconds"))
     a.delivery = deliver(a)

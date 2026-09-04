@@ -14,7 +14,7 @@ Everything below follows from one line:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Streamlit UI  :8501  ──HTTP──▶  FastAPI  :8850                  │
-│  7 screens                       19 endpoints, 1 of which writes │
+│  5 screens                       16 endpoints, 1 of which writes │
 │  The UI imports no project module. Its only path in is the API.  │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
@@ -24,8 +24,8 @@ Everything below follows from one line:
 │   controller   :8824  plans the close, delegates      no model    │
 │   matcher      :8822  the T0/T1 funnel                no model    │
 │   policy       :8821  ★ THE GATE ★               no model, ever   │
-│   investigator :8823  evidence chains                 LLM         │
-│   qa           :8825  read-only questions             LLM         │
+│   investigator :8823  evidence chains, on demand      LLM (20b)   │
+│   qa           :8825  read-only questions             LLM (120b)  │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────────┐
@@ -111,7 +111,10 @@ Read/write is split at the tool-list level: the Q&A agent is built `read_only=Tr
   decisions.jsonl · close_report.json · trace.jsonl ──── run_end
 ```
 
-Nothing there is a model call unless the optional investigator line runs.
+Nothing there is a model call unless the optional investigator line runs. That line fires two
+ways: batched here during a close (`--investigate N`, largest escalations first), or on demand —
+`POST /approvals/{id}/investigate` calls the same skill for one record, wired to an **Investigate**
+button in the Approval Inbox so a reviewer can ask before deciding rather than only in a batch.
 
 ---
 
@@ -216,7 +219,7 @@ runs/<run_id>/       trace.jsonl · decisions.jsonl · close_report.json · scor
 | Validation | Pydantic v2, `extra="forbid"` on every record type |
 | Agent protocol | `a2a-sdk` 1.1.2 |
 | Tool protocol | MCP 2.x over streamable-http |
-| LLM | Groq, `openai/gpt-oss-120b` — investigator and Q&A only |
+| LLM | Groq — Q&A on `openai/gpt-oss-120b`, investigator on the smaller `openai/gpt-oss-20b` |
 | API · UI | FastAPI + uvicorn · Streamlit |
 | Config | **plain Python.** No YAML, no TOML. `.env` is the one exception |
 | Tests | none — the two generator gates and the eval harness stand in |
